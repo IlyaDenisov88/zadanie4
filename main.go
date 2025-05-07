@@ -7,66 +7,43 @@ import (
 	"net/http"
 )
 
-// APIResponse представляет структуру ответа сервера
-type APIResponse struct {
+type Response struct {
 	Message  string `json:"message"`
-	Header   string `json:"x-header-value"`
-	Body     string `json:"request_body"`
+	XResult  string `json:"x-result"`
+	XBody    string `json:"x-body"`
 }
 
-// Middleware для обработки CORS
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Устанавливаем CORS заголовки
+func enableCORS(handler http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "x-test, ngrok-skip-browser-warning, Content-Type, Accept")
+		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
+		w.Header().Set("Access-Control-Allow-Headers", "x-test,ngrok-skip-browser-warning,Content-Type,Accept,Access-Control-Allow-Headers")
 		
-		// Обрабатываем предварительный запрос OPTIONS
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
+		if r.Method == "OPTIONS" {
+			w.WriteHeader(http.StatusOK)
 			return
 		}
 		
-		next.ServeHTTP(w, r)
-	})
+		handler(w, r)
+	}
 }
 
-// Обработчик запросов
-func apiHandler(w http.ResponseWriter, r *http.Request) {
-	// Читаем тело запроса
-	reqBody, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, "Error reading request body", http.StatusBadRequest)
-		return
-	}
+func resultHandler(w http.ResponseWriter, r *http.Request) {
+	body, _ := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
-	// Формируем ответ
-	response := APIResponse{
-		Message:  "ilya-denisov",
-		Header:   r.Header.Get("x-test"),
-		Body:     string(reqBody),
+	response := Response{
+		Message: "ilya_denisov",
+		XResult: r.Header.Get("x-test"),
+		XBody:   string(body),
 	}
 
-	// Устанавливаем заголовок и кодируем ответ
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		log.Printf("Error encoding response: %v", err)
-	}
+	json.NewEncoder(w).Encode(response)
 }
 
 func main() {
-	// Создаем маршрутизатор
-	mux := http.NewServeMux()
-	mux.HandleFunc("/result4/", apiHandler)
-
-	// Обертываем маршрутизатор в middleware
-	wrappedMux := corsMiddleware(mux)
-
-	// Запускаем сервер
-	log.Println("Starting server on :5000")
-	if err := http.ListenAndServe(":5000", wrappedMux); err != nil {
-		log.Fatalf("Server failed: %v", err)
-	}
+	http.HandleFunc("/result4/", enableCORS(resultHandler))
+	log.Printf("Server starting on http://0.0.0.0:5000")
+	log.Fatal(http.ListenAndServe("0.0.0.0:5000", nil))
 }
